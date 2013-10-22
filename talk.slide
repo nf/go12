@@ -1,0 +1,346 @@
+Go: a simple programming environment
+
+Andrew Gerrand
+Google
+@enneff
+adg@golang.org
+http://golang.org
+
+* Why Go?
+
+* Software should be simple
+
+* Software can be simple
+
+* What I mean by "simple"
+
+- Small
+- Readable
+- Consistent
+- Orthogonal
+- Predictable
+- Robust
+- Useful by default
+
+* Go at a glance
+
+- Compiled
+- Statically typed
+- Clean syntax
+- Simple type system
+- Concurrency primitives
+- Rich standard library
+- Great tools
+- Open source
+
+This talk is just a taste.
+
+* The Gopher
+
+.image support/gopher.jpg
+
+* Go at Google
+
+Go was created at Google to solve Google's problems:
+
+- Network servers that do a lot of stuff concurrently
+- Run on huge clusters of networked machines
+- Maintained by large teams of programmers
+
+Currently used by/for:
+
+- YouTube (see the [[https://code.google.com/p/vitess/][vitess project]])
+- [[http://talks.golang.org/2013/oscon-dl.slide][dl.google.com]]
+- Logs Analysis teams
+- Site Reliability and Operations teams
+- Many others (the details are confidential, sorry!)
+
+* Go beyond Google (two short lists)
+
+Companies:
+
+- Canonical
+- CloudFlare
+- Heroku
+- Mozilla
+- ngmoco:)
+- Soundcloud
+- Zynga
+
+Open source projects:
+
+- Camlistore
+- Docker
+
+* Hello, Go
+
+.play support/hello.go
+
+* go
+
+Goroutines are lightweight threads that are managed by the Go runtime.
+To run a function in a new goroutine, just put `"go"` before the function call.
+
+.play support/goroutines.go
+
+* chan
+
+Channels are typed conduits for sychronization and communication between goroutines.
+
+They're a versatile and expressive means of modelling concurrent processes.
+
+But we're not going to look at them today. (There's no time!)
+
+* sync
+
+Channels are great, but sometimes other concurrency mechanisms are a better fit.
+
+The `sync` package provides mutexes, condition variables, and more useful primitives.
+
+.play support/sync.go /func main/,$
+
+* net/http (1/2)
+
+The `net/http` package provides an HTTP client.
+
+.play support/http-client.go /func main/,$
+
+The client handles HTTP `Keep-Alive` using a pool of connections, by default.
+(This is configurable, of course.)
+
+* net/http (2/2)
+
+The `net/http` package also provides an HTTP server.
+
+.play support/http-server.go /func main/,$
+
+This is a high-performance, DoS-hardened, production-ready web server.
+
+It serves `dl.google.com`.
+
+* html/template 
+
+The `html/template` package provides an HTML templating system that automatically escapes content depending on its context.
+
+.play support/template.go /const/,$
+
+* flag 
+
+The `flag` package provides a simple API for parsing command-line flags.
+
+.play support/flag.go /var/,$
+
+Example invocation (a little different than GNU getopt):
+
+	$ flag -message 'Hold on...' -delay 5m
+
+* An example
+
+.link http://isgo1point1outyet.com
+
+.image support/screenshot.png
+
+* Structure
+
+The program has two parts that execute concurrently:
+
+- a poller that continuously checks whether Go 1.2 has been tagged, and
+- an HTTP server providing the user interface.
+
+* The Server type
+
+The `Server` struct contains the server state:
+
+- the poll URL and period, and
+- a boolean value ("Is Go 1.2 out yet?") and a mutex to protect it.
+
+.code support/main-orig.go /type Server/,/^}/
+
+* Sharing state
+
+We must share state ("Is Go 1.2 out?") between the repo poller and the user interface.
+
+To read from a `Server` value `s`, take the read lock (multiple goroutines can do this simultaneously):
+	
+	s.mu.RLock()
+	yes := s.yes
+	s.mu.RUnlock()
+
+To write, take the write lock (only one goroutine can do this at a time):
+
+	s.mu.Lock()
+	s.yes = true
+	s.mu.Unlock()
+
+* Polling (1/2)
+
+The `isTagged` function returns `true` if the given URL returns `"200`OK"`:
+
+.code support/main-orig.go /func isTagged/,/^}/
+
+* Polling (2/2)
+
+The `poll` method loops until `isTagged` returns `true`.
+Then it updates the state ("Go 1.2 is out!") and returns.
+
+.code support/main-orig.go /func .+ poll/,/^}/
+
+* Constructing a Server
+
+The `NewServer` function constructs a new `Server`, starts the polling goroutine, and returns a `*Server` value.
+
+.code support/main-orig.go /func NewServer/,/^}/
+
+* Serving the user interface
+
+The `ServeHTTP` method serves an HTTP request.
+
+It puts the `s.yes` and `s.url` values into a struct,
+and uses the struct to render the template as the HTTP response.
+
+.code support/main-orig.go /func .+ ServeHTTP/,/^}/
+
+This is an implementation of the `http.Handler` interface.
+
+* The HTML user interface
+
+The `tmpl` variable is a template that provides the HTML user inteface.
+It is a global variable, so the template is parsed just once at init time.
+
+.code support/main-orig.go /var tmpl/,/^`/
+
+* Putting it all together
+
+The `main` function starts polling in a new goroutine and sets up the web server.
+Some command-line flags enable run time configuration.
+
+.code support/main-orig.go /const default/,/^}/
+
+The whole program is just 87 lines of code.
+
+* Demo
+
+* Testing: writing tests
+
+The `testing` package provides a lightweight test framework.
+
+.code support/string_test.go /func TestIndex/,/^}/
+
+* Testing: running tests
+
+The go tool runs tests.
+
+	$ go test
+	PASS
+	ok  	strings	0.682s
+
+	$ go test -v
+	=== RUN TestIndex
+	--- PASS: TestIndex (0.00 seconds)
+	=== RUN TestReplace
+	--- PASS: TestReplace (0.00 seconds)
+	=== RUN TestContains
+	--- PASS: TestContains (0.00 seconds)
+	... many lines omitted ...
+	PASS
+	ok  	strings	0.659s
+
+* Testing: coverage statistics
+
+New in Go 1.2: the `go` tool can report test coverage statistics.
+
+	$ go test -cover
+	PASS
+	coverage: 96.4% of statements
+	ok  	strings	0.692s
+
+The `go` tool can generate coverage profiles that may be intepreted by the `cover` tool.
+
+	$ go test -coverprofile=cover.out
+	$ go tool cover -func=cover.out
+	strings/reader.go:    Len             66.7%
+	strings/strings.go:   TrimSuffix     100.0%
+	... many lines omitted ...
+	strings/strings.go:   Replace        100.0%
+	strings/strings.go:   EqualFold      100.0%
+	total:                (statements)    96.4%
+
+* Testing: coverage visualization
+
+	$ go tool cover -html=cover.out
+
+.image support/cover.png
+
+* Testing: isTagged
+
+To test the `isTagged` function we'll use the `net/http/httptest` package.
+
+.code main_test.go /func TestIsTagged/,/^}/
+
+The `StatusHandler` type is an `http.Handler` that sends an HTTP status of itself.
+
+.code main_test.go /type StatusHandler/,/^}/
+
+* Testing: an integration test (1/2)
+
+.code main_test.go /func TestIntegration/,/^}/
+
+* One more thing
+
+* expvar (1/2)
+
+The `expvar` package allows you to export variables via an HTTP handler
+registered at [[http://localhost:8080/debug/vars][`/debug/vars`]].
+
+.play support/expvar.go
+
+* expvar (2/2)
+
+.code main.go /Exported variables/,/^\)/
+
+.code main.go /func isTagged/,/^}/
+
+.code main.go /func .+ ServeHTTP/,/hitCount/
+
+* Demo
+
+* Conclusion
+
+Simplicity revisited:
+
+- Small
+- Readable
+- Consistent
+- Orthogonal
+- Predictable
+- Robust
+- Useful by default
+
+* Stuff I didn't talk about
+
+- Types and interfaces
+- Concurrency in depth
+- Packages and the build system
+- Code formatting
+- Benchmarking
+- Debugging
+- Documentation
+
+* Learn more about Go
+
+The Go web site 
+
+- [[http://golang.org][golang.org]]
+
+The Go blog
+
+- [[http://blog.golang.org][blog.golang.org]]
+
+Go talks
+
+- [[http://talks.golang.org][talks.golang.org]]
+
+A Tour of Go
+
+- [[http://tour.golang.org][tour.golang.org]]
+
