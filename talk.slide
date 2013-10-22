@@ -211,7 +211,7 @@ It is a global variable, so the template is parsed just once at init time.
 
 * Putting it all together
 
-The `main` function starts polling in a new goroutine and sets up the web server.
+The `main` function creates a new `Server` and sets up the web server.
 Some command-line flags enable run time configuration.
 
 .code support/main-orig.go /const default/,/^}/
