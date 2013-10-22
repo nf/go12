@@ -145,7 +145,11 @@ Example invocation (a little different than GNU getopt):
 The program has two parts that execute concurrently:
 
 - a poller that continuously checks whether Go 1.2 has been tagged, and
-- an HTTP server providing the user interface.
+- an HTTP server that provides the user interface.
+
+Go 1.2 can be considered "tagged" when this URL returns a `"200`OK"` response:
+
+	https://code.google.com/p/go/source/detail?r=go1.2
 
 * The Server type
 
